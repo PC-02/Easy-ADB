@@ -11,7 +11,7 @@ function getIP(){
 	if [[ "$DEVICE_ID" =~ ^(([1-9]?[0-9]|1[0-9][0-9]|2([0-4][0-9]|5[0-5]))\.){3}([1-9]?[0-9]|1[0-9][0-9]|2([0-4][0-9]|5[0-5]))$ ]]
 	then
 		echo "Using IP provided"
-		echo $DEVICE_ID
+		IP=${DEVICE_ID}
 	else
   		echo "Scanning network to obtain device IP..."
 		DEVICE_IP=$(nmap -sn -Pn 192.168.0.0/24 | grep $DEVICE_ID |  awk 'NF>1{print $NF}' |  tr -d '()')
@@ -22,7 +22,7 @@ function getIP(){
 			exit 0
 		else
 			echo "IP found!"
-			echo $DEVICE_IP
+			IP=${DEVICE_IP}
 		fi
 	fi
 
@@ -52,15 +52,15 @@ fi
 
 ADB_RES=$(adb devices | grep -w device)
 
-if [[ -z ${ADB_RES} ]]
-then
+if [[ -z ${ADB_RES} ]]; then
+
 	echo "No devices connected"
 	WIRED_CONN=0
 else
 	WIRED_CONN=$(echo "${ADB_RES}" | wc -l)
 
-	if [[ $WIRED_CONN != 1 ]]
-	then
+	if [[ $WIRED_CONN != 1 ]]; then
+
 		echo "The connected devices are:"
 		echo "${ADB_RES}"
 	else
@@ -69,44 +69,66 @@ else
 	fi
 fi
 
-printf "\n\n"
+while :
+do
+	printf "\n\n"
 
-echo "What would you like to do?"
+	echo "What would you like to do?"
 
-echo "1) Enable wireless ADB connection"
-printf "\nSelect a number: "
-read OPTION
+	echo "1) Enable wireless ADB connection"
+	echo "2) Start up the phone"
+	echo "Q to quit"
+	printf "\nSelect an option: "
+	read OPTION
 
 
-if [[ "$OPTION" =~ ^(1|2|3)$ ]]
-then
-	if [[ $OPTION = 1 ]]
-	then
-		echo "Has this device been connected wirelessly recently? (Y/N)"
-		read TEMP
+	if [[ "$OPTION" =~ ^(1|2|3)$ ]]; then
 
-		if [[ "$TEMP" =~ ^(n|N|NO|no|No|nO)$ ]]		# If user selects No
-		then
-			if [[ $WIRED_CONN = 0 ]]
-                        then
-                                echo "Connect a device and restart the process"
-                                exit 0
-                        fi
+		if [[ $OPTION = 1 ]]; then
 
-			adb tcpip 5555
-			IP="$(getIP)"
+			echo "Has this device been connected wirelessly recently? (Y/N)"
+			read TEMP
 
-		elif [[ "$TEMP" =~ ^(y|Y|yes|YES|Yes|yEs|yeS|YEs|yES)$ ]]	# If user selects Yes
-		then
-			IP="$(getIP)"
-		else
-			echo "Invalid option."
+			if [[ "$TEMP" =~ ^(n|N|NO|no|No|nO)$ ]]; then		# If user selects No
+
+				if [[ $WIRED_CONN = 0 ]]; then
+                                	echo "Connect a device and restart the process"
+                                	exit 0
+                        	fi
+
+				adb tcpip 5555
+				getIP
+
+			elif [[ "$TEMP" =~ ^(y|Y|yes|YES|Yes|yEs|yeS|YEs|yES)$ ]]; then	# If user selects Yes
+				getIP
+			else
+				echo "Invalid option."
+			fi
+
+			adb connect ${IP}
+			echo "ADB connected wirelessly!"
+
+		elif [[ $OPTION = 2 ]]; then
+
+			printf "Enter the phone password (Empty if no password): "
+			read PASS
+
+			adb shell input keyevent 26
+			adb shell input keyevent 3
+			sleep .5
+			adb shell input swipe 520 1600 520 300
+
+			if [[ -n ${PASS} ]]; then
+				adb shell input text ${PASS}
+				adb shell input keyevent 66
+			fi
 		fi
 
-		echo "Your IP is ${IP}!"
+	elif [[ "$OPTION" =~ ^(q|Q|quit|Quit)$ ]]; then
 
+		exit 0
+	else
+		echo "$OPTION is an invalid option"
+		exit 0
 	fi
-else
-	echo "$OPTION is an invalid option"
-	exit 0
-fi
+done
